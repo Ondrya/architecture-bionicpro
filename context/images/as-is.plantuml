@@ -1,0 +1,64 @@
+@startuml
+
+!include <C4/C4_Container>
+!include <C4/C4_Context>
+
+' Цвета
+!define PERSON_BG #6C6477
+!define PERSON_BORDER #4D4D4D
+!define SYSTEM_BG #1061B0
+!define SYSTEM_BORDER #0D5091
+!define CONTAINER_BG #23A2D9
+!define CONTAINER_BORDER #0E7DAD
+!define EMPLOYEE_BG #083F75
+!define EMPLOYEE_BORDER #06315C
+
+' Внешние пользователи
+Person(pilot, "Пилот протеза", "С этого человека считываются данные")
+Person(buyer, "Покупатель протеза", "")
+
+' Внешние программные системы
+System(prosthesis, "Программа в чипе протеза", "C++", "Чтение данных с датчиков, распознавание движений и их воспроизводство. Чтение команд из приложения и их воспроизводство, передача телеметрии")
+System(mobile_app, "Приложение для донастройки протеза", "iOS, Android", "")
+
+' Сотрудники компании (внешние пользователи, но взаимодействуют с BionicPRO)
+Person(ml_engineer, "ML-инженер", "")
+Person(operator, "Оператор производства", "")
+
+' Граница системы BionicPRO
+Boundary(bionicpro, "BionicPRO", "Software System") {
+    ' Контейнеры внутри BionicPRO
+    Container(api, "API", "SpringBoot", "")
+    ContainerDb(postgres, "База данных", "PostgreSQL", "")
+    Container(shop, "Интернет-магазин", "Битрикс24", "")
+    Container(crm, "CRM", "Битрикс24", "")
+    ContainerDb(crm_db, "CRM DB", "Oracle Database 12", "")
+    Container(cli, "cli tool", "Python", "")
+}
+
+' Связи между внешними системами и людьми
+Rel(pilot, prosthesis, "Предоставление миосигналов")
+Rel(mobile_app, prosthesis, "Управление протезом", "Bluetooth")
+
+' Связи внешних систем с BionicPRO
+Rel(prosthesis, api, "Отправка технической телеметрии", "4G")
+Rel(mobile_app, api, "Синхронизация настроек и данных", "HTTPS")
+
+' Связи внутри BionicPRO
+Rel(api, postgres, "CRUD", "SQL")
+
+' Интернет-магазин и CRM
+Rel(buyer, shop, "Выбор протеза, заказ, оплата", "HTTPS")
+Rel(shop, crm, "Передача данных заказа", "")
+Rel(crm, crm_db, "CRUD", "SQL")
+
+' Работа сотрудников
+Rel(ml_engineer, cli, "Запуск выгрузки", "")
+Rel(cli, postgres, "Выгрузка данных для ML", "SQL")
+
+Rel(operator, crm, "Ведение производства", "")
+
+' Дополнительные связи для полноты
+Rel(prosthesis, mobile_app, "Передача статуса", "Bluetooth")
+
+@enduml
