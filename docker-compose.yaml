@@ -51,6 +51,7 @@ services:
       KC_DB_URL: jdbc:postgresql://keycloak_db:5432/keycloak_db
       KC_DB_USERNAME: keycloak_user
       KC_DB_PASSWORD: keycloak_password
+      KC_HEALTH_ENABLED: "true"
     command: start-dev --http-port=8082 --import-realm
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
@@ -59,12 +60,17 @@ services:
     depends_on:
       keycloak_db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/health/ready || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+    
+  keycloak-ready:
+    image: curlimages/curl:8.10.1
+    container_name: bionicpro-keycloak-ready
+    depends_on:
+      keycloak:
+        condition: service_started
+    command: >
+      sh -c "until curl -fsS http://keycloak:8082/realms/reports-realm/.well-known/openid-configuration > /dev/null;
+             do echo 'waiting for keycloak...'; sleep 2; done"
+    restart: "no"
 
   frontend:
     container_name: bionicpro-frontend
@@ -78,6 +84,30 @@ services:
       REACT_APP_KEYCLOAK_URL: http://localhost:8082
       REACT_APP_KEYCLOAK_REALM: reports-realm
       REACT_APP_KEYCLOAK_CLIENT_ID: reports-frontend
+
+  backend:
+    container_name: bionicpro-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      CLICKHOUSE_HOST: olap_db
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: demo
+      CLICKHOUSE_PASSWORD: demo
+      CLICKHOUSE_DATABASE: default
+      KEYCLOAK_WELL_KNOWN_URL: http://keycloak:8082/realms/reports-realm/.well-known/openid-configuration
+      KEYCLOAK_AUDIENCE: ""
+      KEYCLOAK_ISSUER_OVERRIDE: http://localhost:8082/realms/reports-realm
+      ALLOWED_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      olap_db:
+        condition: service_healthy
+    restart: unless-stopped
 
   openldap:
     image: osixia/openldap:1.5.0
