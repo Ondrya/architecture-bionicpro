@@ -1,0 +1,83 @@
+@startuml
+!include <C4/C4_Container>
+!include <C4/C4_Context>
+
+' Цвета
+!define PERSON_BG #6C6477
+!define PERSON_BORDER #4D4D4D
+!define SYSTEM_BG #1061B0
+!define SYSTEM_BORDER #0D5091
+!define CONTAINER_BG #23A2D9
+!define CONTAINER_BORDER #0E7DAD
+!define EMPLOYEE_BG #083F75
+!define EMPLOYEE_BORDER #06315C
+
+' Внешние пользователи
+Person(pilot, "Пилот протеза", "С этого человека считываются данные")
+Person(buyer, "Покупатель протеза", "")
+
+' Внешние программные системы
+System(prosthesis, "Программа в чипе протеза", "C++", "Чтение данных с датчиков, распознавание движений и их воспроизводство")
+System(mobile_app, "Приложение для донастройки протеза", "iOS, Android", "")
+
+' Внешние IdP (региональные)
+System(keycloak, "Keycloak (РФ)", "OIDC Provider", "Аутентификация пользователей в РФ")
+System(foreign_idp, "Международный IdP", "OIDC Provider", "Для других стран")
+
+' Сотрудники компании
+Person(ml_engineer, "ML-инженер", "")
+Person(operator, "Оператор производства", "")
+
+' Граница системы BionicPRO
+Boundary(bionicpro, "BionicPRO", "Software System") {
+    ' Auth Gateway (BFF) - единая точка входа
+    Container(auth_gateway, "Auth Gateway", "Spring Cloud Gateway / Node.js", "BFF-сервис: управление сессиями, проксирование запросов, хранение токенов в HTTP-only cookies")
+    
+    ' Сервис федерации пользователей
+    Container(federation, "User Federation Service", "SpringBoot", "Синхронизация пользователей из IdP, хранение только reference-идентификаторов")
+    
+    ' Существующие контейнеры
+    Container(api, "API", "SpringBoot", "Бизнес-логика")
+    ContainerDb(postgres, "База данных", "PostgreSQL", "Основное хранилище")
+    Container(shop, "Интернет-магазин", "Битрикс24", "")
+    Container(crm, "CRM", "Битрикс24", "")
+    ContainerDb(crm_db, "CRM DB", "Oracle Database 12", "")
+    Container(cli, "cli tool", "Python", "")
+}
+
+' Связи аутентификации (безопасная схема с PKCE)
+Rel(mobile_app, auth_gateway, "1. Аутентификация через OIDC с PKCE", "HTTPS")
+Rel(auth_gateway, keycloak, "2. Authorization Code Flow", "HTTPS")
+Rel(auth_gateway, foreign_idp, "2. Authorization Code Flow", "HTTPS")
+Rel(auth_gateway, mobile_app, "3. Session cookie (HTTP-only)", "HTTPS")
+
+' Внутренние связи (все через Auth Gateway)
+Rel(auth_gateway, api, "Прокси-запросы с user context (из сессии)", "HTTP")
+Rel(auth_gateway, shop, "Прокси-запросы", "HTTP")
+Rel(auth_gateway, federation, "Создание/обновление пользователя", "HTTP")
+
+' Federation Service синхронизирует данные
+Rel(federation, postgres, "Сохранение reference ID (без ПДн)", "SQL")
+Rel(federation, keycloak, "Запрос информации о пользователе", "HTTPS")
+Rel(federation, foreign_idp, "Запрос информации о пользователе", "HTTPS")
+
+' Существующие связи
+Rel(api, postgres, "CRUD", "SQL")
+Rel(shop, crm, "Передача данных заказа", "")
+Rel(crm, crm_db, "CRUD", "SQL")
+
+' Связи с протезом
+Rel(pilot, prosthesis, "Предоставление миосигналов")
+Rel(mobile_app, prosthesis, "Управление протезом", "Bluetooth")
+Rel(prosthesis, api, "Отправка технической телеметрии", "4G")
+Rel(prosthesis, mobile_app, "Передача статуса", "Bluetooth")
+
+' Работа сотрудников
+Rel(ml_engineer, cli, "Запуск выгрузки", "")
+Rel(cli, postgres, "Выгрузка данных для ML", "SQL")
+Rel(operator, crm, "Ведение производства", "")
+
+' Связь покупателя
+Rel(buyer, shop, "Выбор протеза, заказ, оплата", "HTTPS")
+
+@enduml
